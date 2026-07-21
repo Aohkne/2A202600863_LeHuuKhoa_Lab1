@@ -9,13 +9,28 @@ All external API calls are mocked — no real API keys required.
 """
 
 import importlib.util
+import re
 import sys
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 DAY_DIR = Path(__file__).parent.parent
 SOLUTION_DIR = DAY_DIR / "solution"
+
+# unittest.mock.patch resolves target strings via pkgutil.resolve_name,
+# which imports the dotted name segment by segment starting from the
+# leftmost part. Folder names (e.g. student IDs) may start with a digit
+# or contain characters that aren't valid identifiers, and even after
+# sanitizing, the leftmost segment isn't a real importable package on
+# disk. Register a dummy placeholder module under the sanitized name so
+# pkgutil's import finds it directly in sys.modules instead of trying
+# (and failing) to import it for real.
+_SAFE_PREFIX = re.sub(r"\W", "_", DAY_DIR.name)
+if not _SAFE_PREFIX or _SAFE_PREFIX[0].isdigit():
+    _SAFE_PREFIX = f"day_{_SAFE_PREFIX}"
+sys.modules.setdefault(_SAFE_PREFIX, types.ModuleType(_SAFE_PREFIX))
 
 
 def _load(path: Path, unique_name: str):
@@ -27,12 +42,12 @@ def _load(path: Path, unique_name: str):
 
 
 if (SOLUTION_DIR / "solution.py").exists():
-    _m = _load(SOLUTION_DIR / "solution.py", f"{DAY_DIR.name}.solution")
+    _m = _load(SOLUTION_DIR / "solution.py", f"{_SAFE_PREFIX}.solution")
 elif (SOLUTION_DIR / "app.py").exists():
-    _m = _load(SOLUTION_DIR / "app.py", f"{DAY_DIR.name}.solution")
+    _m = _load(SOLUTION_DIR / "app.py", f"{_SAFE_PREFIX}.solution")
 else:
     src = "template.py" if (DAY_DIR / "template.py").exists() else "app.py"
-    _m = _load(DAY_DIR / src, f"{DAY_DIR.name}.template")
+    _m = _load(DAY_DIR / src, f"{_SAFE_PREFIX}.template")
 
 call_openai = getattr(_m, 'call_openai')
 call_openai_mini = getattr(_m, 'call_openai_mini')
